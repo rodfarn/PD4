@@ -98,7 +98,10 @@ El modelo representa conceptos y reglas del dominio FILEY, mientras la interfaz 
 | `VistaListas` | Mostrar en consola el estado de conexión y las listas leídas. |
 | `ConexionBD` | Abrir la conexión JDBC con H2 en memoria. |
 | `InicializadorBD` | Crear las tablas y cargar datos de ejemplo para la demostración. |
-| `RepositorioFileyJDBC` | Leer stands, editoriales y reservas mediante consultas JDBC. |
+| `ReadQuery` | Recibir la conexión JDBC y ejecutar los `SELECT` de stands, editoriales y reservas. |
+| `DataAccessException` | Informar errores de consulta JDBC sin propagarlos como `SQLException` al controlador. |
+| `DatabaseConnectionException` | Informar errores al abrir o cerrar la conexión. |
+| `DatabaseInitializationException` | Informar errores al crear tablas o cargar datos iniciales. |
 | `Stand` | Representar un espacio, calcular área y precio y controlar sus cambios de estado. |
 | `Reserva` | Asociar stand y editorial, calcular fechas límite, pagos, descuento, saldo y porcentaje pagado. |
 | `Editorial` | Representar el nombre y contacto de la editorial. |
@@ -139,6 +142,6 @@ Al iniciar, `Main` se conecta a una base H2 temporal, prepara tablas y datos de 
 
 La base de datos vive en memoria y se elimina al cerrar la aplicación. El menú de consola mantiene sus datos en memoria, por lo que sus cambios no se guardan en las tablas JDBC.
 
-La clase `ControladorLecturas` coordina la vista y `RepositorioFileyJDBC`; este último contiene las consultas JDBC. `VistaListas` presenta los resultados en consola.
+`ConexionBD` abre la conexión y `Main` se la pasa a `ReadQuery`, que centraliza las consultas `SELECT` de las tablas `STAND`, `EDITORIAL` y `RESERVA`. `ReadQuery` traduce los errores JDBC a excepciones personalizadas. `ControladorLecturas` coordina las consultas con `VistaListas`, que presenta los resultados en consola.
 
 

@@ -1,5 +1,6 @@
 package com.filey.data;
 
+import com.filey.exception.DatabaseInitializationException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -8,9 +9,14 @@ import java.time.LocalDate;
 import java.math.BigDecimal;
 
 public class InicializadorBD {
-    public void crearTablasYDatos(Connection conexion) throws SQLException {
-        crearTablas(conexion);
-        insertarDatosDeEjemplo(conexion);
+    public void crearTablasYDatos(Connection conexion) {
+        try {
+            crearTablas(conexion);
+            insertarDatosDeEjemplo(conexion);
+        } catch (SQLException error) {
+            throw new DatabaseInitializationException(
+                    "No se pudieron crear las tablas o cargar los datos de ejemplo.", error);
+        }
     }
 
     private void crearTablas(Connection conexion) throws SQLException {
