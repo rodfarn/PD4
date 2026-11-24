@@ -98,7 +98,10 @@ El modelo representa conceptos y reglas del dominio FILEY, mientras la interfaz 
 | `VistaListas` | Mostrar en consola el estado de conexión y las listas leídas. |
 | `ConexionBD` | Abrir la conexión JDBC con H2 en memoria. |
 | `InicializadorBD` | Crear las tablas y cargar datos de ejemplo para la demostración. |
+| `InsertQuery` | Ejecutar los `INSERT` para stands, editoriales y reservas. |
 | `ReadQuery` | Recibir la conexión JDBC y ejecutar los `SELECT` de stands, editoriales y reservas. |
+| `UpdateQuery` | Ejecutar los `UPDATE` de stands, editoriales y reservas. |
+| `DeleteQuery` | Ejecutar los `DELETE` de stands, editoriales y reservas. |
 | `DataAccessException` | Informar errores de consulta JDBC sin propagarlos como `SQLException` al controlador. |
 | `DatabaseConnectionException` | Informar errores al abrir o cerrar la conexión. |
 | `DatabaseInitializationException` | Informar errores al crear tablas o cargar datos iniciales. |
@@ -142,6 +145,6 @@ Al iniciar, `Main` se conecta a una base H2 temporal, prepara tablas y datos de 
 
 La base de datos vive en memoria y se elimina al cerrar la aplicación. El menú de consola mantiene sus datos en memoria, por lo que sus cambios no se guardan en las tablas JDBC.
 
-`ConexionBD` abre la conexión y `Main` se la pasa a `ReadQuery`, que centraliza las consultas `SELECT` de las tablas `STAND`, `EDITORIAL` y `RESERVA`. `ReadQuery` traduce los errores JDBC a excepciones personalizadas. `ControladorLecturas` coordina las consultas con `VistaListas`, que presenta los resultados en consola.
+`ConexionBD` abre la conexión y `Main` se la pasa a `ReadQuery` para las consultas actuales. Cada clase recibe una conexión y concentra una operación: `InsertQuery` para `INSERT`, `ReadQuery` para `SELECT`, `UpdateQuery` para `UPDATE` y `DeleteQuery` para `DELETE` en las tablas `STAND`, `EDITORIAL` y `RESERVA`. Las clases traducen los errores JDBC a excepciones personalizadas. `ControladorLecturas` usa `ReadQuery` con `VistaListas` para presentar los resultados en consola.
 
 
