@@ -94,6 +94,7 @@ El modelo representa conceptos y reglas del dominio FILEY, mientras la interfaz 
 | `Main` | Abrir la conexión, iniciar las lecturas JDBC y después iniciar el menú. |
 | `Consola` | Mostrar el menú, leer y validar entradas de formato, invocar operaciones y presentar resultados. |
 | `SistemaFiley` | Coordinar configuración, stands, reservas, pagos y revisión de notificaciones. |
+| `ControladorCRUD` | Recibir las acciones del menú y llamar a las operaciones JDBC. |
 | `ControladorLecturas` | Coordinar las consultas del repositorio y la presentación de las listas. |
 | `VistaListas` | Mostrar en consola el estado de conexión y las listas leídas. |
 | `ConexionBD` | Abrir la conexión JDBC con H2 en memoria. |
@@ -119,6 +120,39 @@ El modelo representa conceptos y reglas del dominio FILEY, mientras la interfaz 
 
 ![Diagrama de clases](docs/DiagramaClasesPD4.png)
 
+Flujo de conexión y separación de responsabilidades para las operaciones JDBC disponibles desde el menú:
+
+```mermaid
+classDiagram
+    class Main
+    class ConexionBD
+    class Consola
+    class ControladorCRUD
+    class ControladorLecturas
+    class InsertQuery
+    class ReadQuery
+    class UpdateQuery
+    class DeleteQuery
+    class InicializadorBD
+    class VistaListas
+    Main --> ConexionBD : abre y mantiene
+    Main --> InicializadorBD : prepara esquema
+    Main --> Consola : inicia con controladores
+    Main --> ControladorCRUD
+    Main --> ControladorLecturas
+    Consola --> ControladorCRUD : CRUD interactivo
+    ControladorCRUD --> InsertQuery
+    ControladorCRUD --> ReadQuery
+    ControladorCRUD --> UpdateQuery
+    ControladorCRUD --> DeleteQuery
+    ControladorLecturas --> ReadQuery
+    ControladorLecturas --> VistaListas
+    InsertQuery --> ConexionBD : usa Connection
+    ReadQuery --> ConexionBD : usa Connection
+    UpdateQuery --> ConexionBD : usa Connection
+    DeleteQuery --> ConexionBD : usa Connection
+```
+
 Los requisitos funcionales y no funcionales completos están en [`requisitos.md`](requisitos.md).
 
 ## Diagrama de Entidad-Relación
@@ -128,7 +162,7 @@ Los requisitos funcionales y no funcionales completos están en [`requisitos.md`
 
 ## Video de evidencia
 
-[Ver video de evidencia](https://drive.google.com/file/d/1Xp_ZxtjxVvqKpCvky4chqQXJixaiMtGq/view?usp=sharing)
+[Ver video de evidencia](https://drive.google.com/file/d/1j-tsnD6yxnt3t0eF8tWwBzfQj3z_CElO/view)
 
 ## Compilar y ejecutar
 
@@ -143,8 +177,36 @@ mvn compile exec:java
 
 Al iniciar, `Main` se conecta a una base H2 temporal, prepara tablas y datos de demostración, y muestra las listas de stands, editoriales y reservas mediante consultas JDBC. Después inicia el menú de consola.
 
-La base de datos vive en memoria y se elimina al cerrar la aplicación. El menú de consola mantiene sus datos en memoria, por lo que sus cambios no se guardan en las tablas JDBC.
+La base H2 vive en memoria y se elimina al cerrar la aplicación. Al iniciar, se cargan datos de ejemplo. La conexión permanece abierta mientras se usa el menú. La opción **10. CRUD de base de datos** ejecuta operaciones JDBC persistidas durante esa ejecución; las opciones originales de administración y pagos siguen trabajando con el modelo de negocio en memoria.
 
-`ConexionBD` abre la conexión y `Main` se la pasa a `ReadQuery` para las consultas actuales. Cada clase recibe una conexión y concentra una operación: `InsertQuery` para `INSERT`, `ReadQuery` para `SELECT`, `UpdateQuery` para `UPDATE` y `DeleteQuery` para `DELETE` en las tablas `STAND`, `EDITORIAL` y `RESERVA`. Las clases traducen los errores JDBC a excepciones personalizadas. `ControladorLecturas` usa `ReadQuery` con `VistaListas` para presentar los resultados en consola.
+`ConexionBD` abre la conexión. `Main` construye los controladores CRUD y de lecturas y conserva la sesión hasta salir. Cada clase de acceso a datos recibe esa conexión y concentra un tipo de operación: `InsertQuery` (`INSERT`), `ReadQuery` (`SELECT`), `UpdateQuery` (`UPDATE`) y `DeleteQuery` (`DELETE`). `ControladorCRUD` coordina estas clases; la consola solicita los datos y presenta los resultados.
+
+### Operaciones CRUD disponibles en el menú
+
+En la opción 10 se elige operación y entidad. Las tablas se separan por tipo de operación, para que cada consulta esté localizada en una sola clase:
+
+| Entidad | Crear | Consultar | Actualizar | Eliminar |
+|---|---|---|---|---|
+| `STAND` | Identificador, dimensiones, precio y estado inicial disponible | Lista de stands | Estado | Por identificador |
+| `EDITORIAL` | Nombre y contacto; el sistema asigna el siguiente ID | Lista de editoriales | Nombre y contacto | Por ID |
+| `RESERVA` | Stand existente, editorial existente y fechas; el sistema asigna el siguiente ID | Lista con stand y editorial asociados | Fechas de la reserva | Por ID; al eliminarla, el stand queda disponible |
+
+Las claves foráneas impiden eliminar un stand o editorial que todavía esté referenciado por una reserva. Para eliminar esos registros, primero se elimina la reserva. Al crear una reserva, el estado del stand cambia a `RESERVADO`.
+
+El menú está escrito con estructuras básicas de Java: `if`, `switch`, ciclos `while` y `for`, y métodos pequeños para cada operación. `ControladorCRUD` coordina las consultas y la consola lee los datos y muestra el resultado.
+
+### Excepciones de acceso a datos
+
+Las excepciones se encuentran en `com.filey.exception` y heredan de `FileyException` (`RuntimeException`):
+
+| Excepción | Dónde se dispara | Argumentos |
+|---|---|---|
+| `DatabaseConnectionException` | `ConexionBD.conectar()` si falla la apertura y `close()` si falla el cierre | Mensaje contextual (`String`) y causa JDBC (`SQLException`) |
+| `DatabaseInitializationException` | `InicializadorBD.crearTablasYDatos()` si falla el DDL o la carga de datos iniciales | Mensaje contextual (`String`) y causa JDBC (`SQLException`) |
+| `DataAccessException` | Métodos de `InsertQuery`, `ReadQuery`, `UpdateQuery` y `DeleteQuery` si JDBC rechaza la consulta | Mensaje por operación (`String`) y causa JDBC (`SQLException`) |
+| `IllegalArgumentException` | Validaciones de entidades, entradas de menú y argumentos inválidos de las consultas | Mensaje que describe el campo u opción inválida; no lleva causa |
+| `IllegalStateException` | Reglas del dominio, por ejemplo reservar un stand no disponible o pagar después del plazo | Mensaje de la regla incumplida; no lleva causa |
+
+El controlador propaga los errores de acceso; el menú captura las excepciones de dominio y JDBC y muestra su mensaje para que la aplicación pueda continuar.
 
 

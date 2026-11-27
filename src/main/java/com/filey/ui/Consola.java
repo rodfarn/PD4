@@ -1,19 +1,26 @@
 package com.filey.ui;
 
-import com.filey.domain.Configuracion;
 import com.filey.domain.Editorial;
+import com.filey.domain.EstadoStand;
 import com.filey.domain.Reserva;
 import com.filey.domain.Stand;
+import com.filey.controller.ControladorCRUD;
 import com.filey.notification.Notificacion;
 import com.filey.service.SistemaFiley;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Scanner;
 
 public class Consola {
     private final Scanner entrada = new Scanner(System.in);
     private final SistemaFiley sistema = new SistemaFiley();
+    private final ControladorCRUD crud;
+
+    public Consola(ControladorCRUD crud) {
+        this.crud = crud;
+    }
 
     public void iniciar() {
         System.out.println("=== Sistema Administrativo de Stands FILEY ===");
@@ -39,6 +46,7 @@ public class Consola {
         System.out.println("7. Transferir bloqueado a reserva");
         System.out.println("8. Registrar pago");
         System.out.println("9. Revisar notificaciones");
+        System.out.println("10. Administrar stands, editoriales y reservas");
         System.out.println("0. Salir");
         System.out.print("Seleccione una opción: ");
     }
@@ -54,10 +62,163 @@ public class Consola {
             case "7": reservar(true); break;
             case "8": registrarPago(); break;
             case "9": mostrarNotificaciones(); break;
+            case "10": menuCrud(); break;
             case "0": return false;
             default: System.out.println("Opción no válida.");
         }
         return true;
+    }
+
+    private void menuCrud() {
+        while (true) {
+            System.out.println("\n--- Administración de stands, editoriales y reservas ---");
+            System.out.println("1. Crear registro");
+            System.out.println("2. Consultar registros");
+            System.out.println("3. Actualizar registro");
+            System.out.println("4. Eliminar registro");
+            System.out.println("0. Volver");
+            String operacion = leerTexto("Operación: ");
+            if ("0".equals(operacion)) {
+                return;
+            }
+            try {
+                String entidad = seleccionarEntidad();
+                switch (operacion) {
+                    case "1":
+                        crear(entidad);
+                        break;
+                    case "2":
+                        consultar(entidad);
+                        break;
+                    case "3":
+                        actualizar(entidad);
+                        break;
+                    case "4":
+                        eliminar(entidad);
+                        break;
+                    default:
+                        System.out.println("Operación no válida.");
+                }
+            } catch (RuntimeException error) {
+                System.out.println("Error: " + error.getMessage());
+            }
+        }
+    }
+
+    private String seleccionarEntidad() {
+        System.out.println("1. Stand  2. Editorial  3. Reserva");
+        String opcion = leerTexto("Entidad: ");
+        if (!"1".equals(opcion) && !"2".equals(opcion) && !"3".equals(opcion)) {
+            throw new IllegalArgumentException("Seleccione una entidad válida.");
+        }
+        return opcion;
+    }
+
+    private void crear(String entidad) {
+        switch (entidad) {
+            case "1":
+                crud.crearStand(new Stand(leerTexto("Identificador: "),
+                        leerDecimal("Ancho: "), leerDecimal("Largo: "),
+                        leerDecimal("Precio total: "), EstadoStand.DISPONIBLE));
+                break;
+            case "2":
+                crud.crearEditorial(new Editorial(leerTexto("Nombre: "), leerTexto("Contacto: ")));
+                break;
+            case "3":
+                List<Stand> stands = crud.listarStands();
+                List<Editorial> editoriales = crud.listarEditoriales();
+                if (stands.isEmpty() || editoriales.isEmpty()) {
+                    throw new IllegalStateException("Registre primero un stand y una editorial.");
+                }
+                String standId = leerTexto("Identificador del stand: ");
+                int editorialId = leerEntero("ID de editorial: ");
+                Stand stand = buscarStand(stands, standId);
+                Editorial editorial = buscarEditorial(editoriales, editorialId);
+                LocalDate fecha = leerFecha("Fecha de reserva (AAAA-MM-DD): ");
+                LocalDate vence = leerFecha("Fecha de vencimiento (AAAA-MM-DD): ");
+                LocalDate pronto = leerFecha("Fecha límite pronto pago (AAAA-MM-DD): ");
+                LocalDate liquidacion = leerFecha("Fecha límite liquidación (AAAA-MM-DD): ");
+                crud.crearReserva(new Reserva(stand, editorial, fecha, vence, pronto, liquidacion));
+                break;
+            default: throw new IllegalArgumentException("Entidad no válida.");
+        }
+        System.out.println("Registro creado en la base de datos.");
+    }
+
+    private void consultar(String entidad) {
+        switch (entidad) {
+            case "1":
+                for (Stand stand : crud.listarStands()) {
+                    System.out.printf("%s | %s | %s x %s | $%s%n", stand.getIdentificador(),
+                            stand.getEstado(), stand.getAncho(), stand.getLargo(), stand.getPrecio());
+                }
+                break;
+            case "2":
+                for (Editorial editorial : crud.listarEditoriales()) {
+                    System.out.printf("%d | %s | %s%n", editorial.getId(), editorial.getNombre(), editorial.getContacto());
+                }
+                break;
+            case "3":
+                for (Reserva reserva : crud.listarReservas()) {
+                    System.out.printf("%d | Stand %s | Editorial %d: %s | %s a %s%n", reserva.getId(),
+                            reserva.getStand().getIdentificador(), reserva.getEditorial().getId(),
+                            reserva.getEditorial().getNombre(), reserva.getFechaReserva(), reserva.getFechaVencimiento());
+                }
+                break;
+            default: throw new IllegalArgumentException("Entidad no válida.");
+        }
+    }
+
+    private void actualizar(String entidad) {
+        boolean actualizado;
+        switch (entidad) {
+            case "1":
+                actualizado = crud.actualizarStand(leerTexto("Identificador: "),
+                        EstadoStand.valueOf(leerTexto("Estado (DISPONIBLE, RESERVADO, OCUPADO, BLOQUEADO): ").toUpperCase()));
+                break;
+            case "2":
+                actualizado = crud.actualizarEditorial(leerEntero("ID: "),
+                        leerTexto("Nuevo nombre: "), leerTexto("Nuevo contacto: "));
+                break;
+            case "3":
+                int id = leerEntero("ID de reserva: ");
+                Reserva existente = buscarReserva(crud.listarReservas(), id);
+                LocalDate fecha = leerFecha("Fecha de reserva (AAAA-MM-DD): ");
+                Reserva actualizada = new Reserva(id, existente.getStand(), existente.getEditorial(), fecha,
+                        leerFecha("Fecha de vencimiento (AAAA-MM-DD): "),
+                        leerFecha("Fecha límite pronto pago (AAAA-MM-DD): "),
+                        leerFecha("Fecha límite liquidación (AAAA-MM-DD): "));
+                actualizado = crud.actualizarReserva(actualizada);
+                break;
+            default: throw new IllegalArgumentException("Entidad no válida.");
+        }
+        System.out.println(actualizado ? "Registro actualizado." : "No se encontró el registro.");
+    }
+
+    private void eliminar(String entidad) {
+        boolean eliminado;
+        switch (entidad) {
+            case "1": eliminado = crud.eliminarStand(leerTexto("Identificador: ")); break;
+            case "2": eliminado = crud.eliminarEditorial(leerEntero("ID: ")); break;
+            case "3": eliminado = crud.eliminarReserva(leerEntero("ID de reserva: ")); break;
+            default: throw new IllegalArgumentException("Entidad no válida.");
+        }
+        System.out.println(eliminado ? "Registro eliminado." : "No se encontró el registro.");
+    }
+
+    private Stand buscarStand(List<Stand> stands, String id) {
+        for (Stand stand : stands) if (stand.getIdentificador().equals(id)) return stand;
+        throw new IllegalArgumentException("No existe ese stand en la base de datos.");
+    }
+
+    private Editorial buscarEditorial(List<Editorial> editoriales, int id) {
+        for (Editorial editorial : editoriales) if (editorial.getId() == id) return editorial;
+        throw new IllegalArgumentException("No existe esa editorial en la base de datos.");
+    }
+
+    private Reserva buscarReserva(List<Reserva> reservas, int id) {
+        for (Reserva reserva : reservas) if (reserva.getId() == id) return reserva;
+        throw new IllegalArgumentException("No existe esa reserva en la base de datos.");
     }
 
     private void configurar() {
